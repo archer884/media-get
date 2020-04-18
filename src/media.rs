@@ -1,4 +1,7 @@
+pub mod imgur;
+
 use crate::prelude::*;
+use reqwest::blocking::ClientBuilder;
 use std::collections::VecDeque;
 use std::io::{self, Read};
 use url::Url;
@@ -10,14 +13,12 @@ static USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_2) \
 ///
 /// In addition to providing validation for urls, the provider serves as a factory for any
 /// associated media accessors.
-trait Provider {
-    fn is_valid(&self, url: &Url) -> bool;
-    
-    fn configure_client(&self, builder: reqwest::blocking::ClientBuilder) -> Client {
+pub trait Provider {
+    fn try_get_accessor(&self, url: &Url) -> Option<Box<dyn Accessor>>;
+
+    fn configure_client(&self, builder: ClientBuilder) -> Client {
         builder.user_agent(USER_AGENT).build().unwrap()
     }
-
-    fn get_accessor(url: &Url) -> Box<dyn Accessor>;
 }
 
 /// An accessor provides access to media designated by the provider.
@@ -25,11 +26,11 @@ trait Provider {
 /// Generally, an accessor will fetch a page of media urls and this page will be processed before
 /// another page is requested. This is done to improve compatibility with rate limits, and to
 /// enable consumers to control when urls are consumed.
-trait Accessor {
-    fn get_page(&mut self, client: &Client) -> Result<VecDeque<String>>;
+pub trait Accessor {
+    fn next_page(&mut self, client: &Client) -> Result<VecDeque<String>>;
 }
 
-struct TaskProvider<T> {
+pub struct TaskProvider<T> {
     client: Client,
     accessor: T,
     current: VecDeque<String>,
@@ -45,7 +46,7 @@ impl<T: Accessor> TaskProvider<T> {
     }
 }
 
-struct Task {
+pub struct Task {
     response: Response,
     context: NamingContext,
 }
@@ -79,16 +80,13 @@ impl<T: Accessor> Iterator for TaskProvider<T> {
 
                     Some(Ok(Task {
                         response,
-                        context: NamingContext {
-                            url,
-                            disposition,
-                        }
+                        context: NamingContext { url, disposition },
                     }))
                 }
                 Err(e) => return Some(Err(e.into())),
             },
 
-            None => match self.accessor.get_page(&self.client) {
+            None => match self.accessor.next_page(&self.client) {
                 Err(e) => return Some(Err(e)),
                 Ok(page) => {
                     self.current = page;
