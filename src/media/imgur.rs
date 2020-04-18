@@ -33,7 +33,7 @@ impl Provider for ImgurProvider {
         headers.insert(header::ACCEPT, HeaderValue::from_static("text/json"));
         headers.insert(
             header::USER_AGENT,
-            HeaderValue::from_static("imgrab 0.1.4+"),
+            HeaderValue::from_static("media-get 0.1.0+"),
         );
         headers.insert(
             "Authorization",
